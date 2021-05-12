@@ -1,0 +1,149 @@
+---
+title: "Course Project Report - Practical Machine Learning"
+author: "Maroje Raguž"
+date: "May 11, 2021"
+output:
+    html_document:
+    toc: yes
+    toc_depth: 2
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+```
+# Introduction
+This is the Course Project Report for the Joan Hopkins University Data Science Specialization course on Practical Machine Leaning held ot the Coursera. The project involves uploading of training and test data sets, data cleaning and creating a prediction model based on machine learning.  The steps taken, to produce the model and to make predictions, are described below.
+
+# Executive Summary
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Project goal
+The goal of this project is to predict the manner in which a group of enthusiasts did the exercise. This is the "classe" variable in the training set -  any of the other variables to predict with may be used. The Report should describe how I have built my model, how I have used cross validation, what do I think the expected out of sample error is, and why I have made the specific choices. I'm also supposed to use my prediction model to predict 20 different test cases.
+
+## Data sources
+Training data can be found here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Test data can be found here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for the project came from this source
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+## Conclusion
+Data triming (treating missing observation) was essential to this analysis. The result of data treatment led to a training set of complete cases i.e. of variables with no missing values. Further data pre-processing wasn't required. 
+A "Random Forest" model fits to this training data and using default parameters produced 100% accuracy in prediction based on testing data set - verified by course project prediction quiz.
+
+
+# Data wrangling
+## R-Environment & Data Import
+```{r echo = FALSE, message = FALSE}
+# ... environment setup
+library(caret)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(VIM)
+library(glmnet)
+library(ranger)
+set.seed(999)
+# ... data import
+training <- read.csv("pml-training.csv", na.strings=c('#DIV/0!', '', 'NA'), stringsAsFactors = F)
+testing  <- read.csv("pml-testing.csv",  na.strings=c('#DIV/0!', '', 'NA'), stringsAsFactors = F)
+```
+
+## Training data - change variable class
+``` {r echo = TRUE, message = FALSE}
+# ... converting training variables to appropriate class
+training$new_window <- as.factor(training$new_window)
+training$kurtosis_yaw_belt <- as.numeric(training$kurtosis_yaw_belt)
+training$skewness_yaw_belt <- as.numeric(training$skewness_yaw_belt)
+training$kurtosis_yaw_dumbbell <- as.numeric(training$kurtosis_yaw_dumbbell)
+training$skewness_yaw_dumbbell <- as.numeric(training$skewness_yaw_dumbbell)
+training$cvtd_timestamp  <- as.factor(training$cvtd_timestamp)
+```
+Several *kurtosis* and *skewness* variables were coerced from class factor to class numeric. A *timestamp* variable was coerced to factor based on the observation that stamps are categorical in nature.
+
+## Testing data - change variable class
+```{r echo = TRUE, message = FALSE}
+# ... converting testing variables to appropriate class
+testing$new_window <- as.factor(testing$new_window)
+testing$kurtosis_yaw_belt <- as.numeric(testing$kurtosis_yaw_belt)
+testing$skewness_yaw_belt <- as.numeric(testing$skewness_yaw_belt)
+testing$kurtosis_yaw_dumbbell <- as.numeric(testing$kurtosis_yaw_dumbbell)
+testing$skewness_yaw_dumbbell <- as.numeric(testing$skewness_yaw_dumbbell)
+testing$cvtd_timestamp  <- as.factor(testing$cvtd_timestamp)
+```
+The same variable class conversion has been applied on both sets -  on the training set as well as on the test set.
+
+# Missing values
+## Plot missing values
+```{r}
+aggr(training)
+```
+
+The plot shows that some variables have nearly completely missing data and that some variables have significant proportions of missing data.
+
+## What proportion of data is missing?
+```{r}
+# ... missing values as a proportion of total
+sum(is.na(training))/(dim(training)[1]*dim(training)[2]) 
+# ... missing values proportion by column / variable
+missing_column <- apply(training, 2, function(x) sum(is.na(x)/length(x)))  
+# ... distribution of missing variables
+hist(missing_column, main = "Missing Data")
+# ... number of predictors > 90% missing
+missing_ic <- which(missing_column > 0.9) 
+length(missing_ic)   
+```
+@ the Figure "Missing Data" can be seen that, overall, more than sixty percent of the total data are missing. One hundred variables had in excess of ninety percent of missing data - those insufficient variables as well as unnecessary observations such as row numbers and raw timestamps will be removed.  
+
+## Remove variables with significan amount of missing data
+```{r}
+# ... remove missing variables from training and test sets
+train.rem1 <- training[,-missing_ic]
+test.rem1  <- testing[, -missing_ic]
+# ... remove X = row count variable, and raw time stamps
+train.rem2  <- train.rem1[,-c(1,3,4)]
+test.rem2   <- test.rem1[,-c(1,3,4)]
+aggr(train.rem2)
+```
+
+## Verifing that all remaining variables are complete 
+```{r}
+# ... examine missing cases ->  all cases are complete
+sum(!complete.cases(train.rem2))
+```
+It has been verified that all remaining variables are complete i.e. remaining variables have no missing data.
+
+# Machine Learning Model (MLM) 
+## Random Forest Model under 10-fold cross validation
+```{r cache = FALSE, message = FALSE}
+# ... fit a "random forest"
+M_Forest  <- train(classe~., data = train.rem2, method = "rf", trControl = trainControl(method = "cv", number = 10, verboseIter = FALSE), na.action = na.pass)
+```
+A *Random Forest* Machine Learning Model (RF MLM) has been fitted. The training set and 10-fold cross-validation have been used to find the best hyperparameter "mtry" for number of variables for splitting at each node - default "mtry" values have been used for resampling.
+
+## Model evaluation
+```{r}
+M_Forest
+getTrainPerf(M_Forest)
+```
+Cross validated accuracy is nearly 100%. Out of sample error is less than 0.15 and there is no reason to look for a better model. 
+When the data is applied to testing observations some reduction in accuracy may be expected.
+
+## Prediction 
+```{r echo = FALSE, message = FALSE}
+P_ForestTest <- predict(M_Forest, test.rem2[,-92], na.action = na.pass)
+P_ForestTest
+```
+Predictions based on course quiz submission were 100% correct.
+
+# Conclusion
+Data triming (treating missing observation) was essential to this analysis. The result of data treatment led to a training set of complete cases i.e. of variables with no missing values. Further data pre-processing wasn't required. 
+A "Random Forest" model fits to this training data and using default parameters produced 100% accuracy in prediction based on testing data set - verified by course project prediction quiz.
+
+## Acknowledgement
+The data for this project, due to generosity of the group of enthusiasts, come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. 
