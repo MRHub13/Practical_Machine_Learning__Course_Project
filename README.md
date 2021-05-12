@@ -7,7 +7,9 @@ and
 Course_Project_Report__Practical_Machine_Learning_Course.html 
 
 
-In order to read html file directly from GitHub repository, just prepend this fragment to the URL of any HTML file: https://htmlpreview.github.io/? e.g. 
+In order to read html file directly from GitHub repository, just prepend this fragment to the URL of any HTML file: https://htmlpreview.github.io/? 
+
+e.g. 
 
 https://htmlpreview.github.io/?https://github.com/MRHub13/Practical_Machine_Learning__Course_Project/blob/main/Course_Project_Report__Practical_Machine_Learning_Course.html
 
